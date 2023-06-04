@@ -1,0 +1,361 @@
+---
+title: "Data Analysis project"
+author: "Srijesh Reddy Yarram"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Introduction
+
+The dataset has been sourced from:
+P. Cortez, A. Cerdeira, F. Almeida, T. Matos and J. Reis. Modeling wine preferences by data mining from physicochemical properties. In Decision Support Systems, Elsevier, 47(4):547-553, 2009.
+http://www3.dsi.uminho.pt/pcortez/wine/
+
+The quality of wine depends on many factors. The two datasets here are related to red and white variants of the Portuguese "Vinho Verde" wine. Only physicochemical (inputs) and sensory (the output) variables are available. The author had chosen 11 attributes that he thought could be significant factors that contribute to the quality of the wine. There are 6498 observations were collected out of which 1599 red and 4898 white examples between May/2004 to February/2007.
+
+These datasets are publicly available for research purposes only. and its being publicly available in
+https://archive.ics.uci.edu/ml/datasets/Wine+Quality
+
+Improving the quality and marketing of vinho verde has always been the moto of CVRVV which is an official certification entity, A computerized system (iLab) has been used to record data. The wine sample testing from requests from producer to laboratory and sensory analysis is automatically managed by iLAb. Each entry denotes a given test (analytical or sensory) and the
+final database was exported into a single sheet (.csv).
+
+Variable name	            Description	                        Measurement type	    Role 
+fixed acidity	          low volatility organic acids level	    numeric	           predictor
+volatile acidity	      level of short-chain organic acids	    numeric	           predictor
+citric acid	            level of citric acid                    numeric	           predictor
+chlorides	              level of chlorides                      numeric	           predictor
+free sulfur dioxide	    level of free sulfur dioxide            numeric	           predictor
+total sulfur dioxide	  level of total sulfur dioxide           numeric	           predictor
+density	                the density of the wine                 numeric            predictor
+pH	                    the pH of the wine                      numeric	           predictor
+sulphates	              level of sulphates                      numeric	           predictor
+alcohol	                level of alcohol                        numeric            predictor
+residual sugar	        level of residual sugars                numeric            predictor
+quality	                quality of the wine                     Integer            outcome
+Color                 	color of wine                           categorical/alpha	 outcome/predictor
+
+a)Is there a significant association between the sulphates in the wine and the quality of the wine?
+
+b)Is there a significant association between the level of alcohol and the quality of the wine?
+
+c)Is there a significant association between the volatile acidity and quality of the wine?
+
+## Conceptual model
+
+We use Bayesian Normal regression model Yi|β0,β1,σ∼N(μi,σ^2) with
+The outcome variable here is 'quality' which is discrete
+-The authors didn't provide enough detail on the process that the wine is made from farm to the bottle, so we also assume that the observed value of the quality is independent of the remaining observed values of quality taking any predictor into account.
+-The outcome quality can be written as a linear function of the predictors.
+model : μi=β0+β1(X)
+Model 1: μi=β0+β1(sulphates)
+Model 2: μi=β0+β1(alcohol)
+Model 3: μi=β0+β1(volatile acidity)
+-The observed values of output variable quality will vary normally around the mean 'μ'with consistent standard diviation σ, for any value of predictor X.
+As we need Markov chains to simulate probability models and also As we are going to deal with the β0,β1,σ. The type of GLM that comes in handy for most of the generalized linear regression models for bayesian approach is stan_glm().
+
+For each of the model parameters we take the same prior PDFs
+The intercept β0~N(6, 1.5^2)
+slope regression parameters β1~N(0, 1^2)
+standard deviation parameter  σ~Exp(1)
+
+a) H0 - There is no significant association between the (sulphates in the wine and the quality of the wine.
+
+Cortez et al.(2009) discusses that Wine Quality highly depends on the sulphates present in it as it is very important in improving the wine aroma. What is the basis for the statement that wine quality is associated with the sulphates in the wine.hence the null hypothesis is framed.
+
+b) H0 - There is no significant association between the level of alcohol and quality of the wine.
+
+Cortez et al.(2009) discusses that Wine Quality increases as the level of alcohol increases. What is the basis for the statement that wine quality is associated with the level of alcohol in the wine. hence the null hypothesis is framed.
+
+c) H0 -There is no significant association between the volatile acidity and the quality of the wine.
+
+Cortez et al.(2009) discusses that the the volatile acidity has a negative impact on the quality of the wine.What is the basis for the statement that wine quality is associated with the volatile acidity in the wine. hence the null hypothesis is framed.
+
+Apart form the intercept β0~N(6, 1.5^2) we are dealing with the weak priors here so we use autoscale technique to tune the prior PDFs' parameter values.
+prior = normal(0, 1, autoscale = TRUE)
+
+## Implementing the model
+
+```{r}
+library(bayesrules)
+library(tidybayes)
+library(tidyverse)
+library(bayesplot)
+library(rstan)
+library(rstanarm)
+library(broom.mixed)
+library(GGally)
+library(janitor)
+```
+
+```{r}
+project1<- read.csv(file = "~/Downloads/untitled/untitled folder/5800/White_Red_Wine_quality.csv",header = TRUE)
+project1<-na.omit(project1)
+head(project1)
+project1$Color<-as.factor(project1$Color)
+summary(project1)
+```
+We are excluding the Color of the wine which is a categorical variable that i have created in the csv file but wasn't there in the original datasets provided, i have merged the two datasets one on red wine and another on white wine from the same context and for my comfort i have created a column called Color for future analysis purposes.
+
+```{r}
+ggpairs(data=project1,
+        columns=c("quality","pH","alcohol","density","citric.acid","residual.sugar","total.sulfur.dioxide","volatile.acidity","fixed.acidity","chlorides","free.sulfur.dioxide","sulphates"))
+```
+The Bivariate Matrix here is not very clear as there are many variables involved in the dataset. but when it comes to quality we can just see that density, alcohol, volatile acidity are correlated with quality of the wine. But it is not clear enough to go with that conclusion. so we need further analysis to understand the relation between the quality of the wine and the remaining predictors.
+
+
+We are going to use the Bayesian Normal regression model where we take the prior intercept β0~N(6, 1.5^2) because from the summary we can see that the min value of the wuality is 3 and max is 9 so we have taken the mean as 6 and the standard deviation is 6-3/2 and 9-3/2 which is 3/2 i.e, 1.5. As there is not enough data provided on the predictors we are assuming that all the predictors are independent of each other and also due lack of information on the predictors we are going to consider the priors as weak priors and use 0 as mean and 1 as standard deviation making the slope regression parameters β1~N(0, 1^2). and we use standard deviation parameter  σ~Exp(1). we use the autoscale feature in the stan_glm() to adjust or tune the priors as we are using weak priors.
+```{r}
+Wine_model_1 <- stan_glm(
+  quality ~pH+alcohol+density+citric.acid+ residual.sugar+total.sulfur.dioxide+volatile.acidity+fixed.acidity+chlorides+free.sulfur.dioxide+sulphates, 
+  data = project1, family = gaussian,
+  prior_intercept = normal(6, 1.5, autoscale = TRUE),
+  prior = normal(0, 1, autoscale = TRUE), 
+  prior_aux = exponential(1, autoscale = TRUE),
+  chains = 4, iter = 5000*2, seed = 2002)
+```
+
+```{r}
+summary(Wine_model_1 )
+```
+
+The mean posterior predictive density which is a measure of how well the model fits the data is positive and decently high.By looking at the MCMC diagnostics The mcse is zero for all the predictors and the rhat is 1 indicating there is no auto correlation.indicating we have sampled the posterior distribution fairly well and therefore considered reliable.And also the effective sample size is more than 10,000 indicating we have sampled the probability space enough to have a good representation.
+
+```{r}
+prior_summary(Wine_model_1)
+```
+
+```{r}
+mcmc_trace(Wine_model_1, size = 0.1)
+```
+
+by applying mcmc_trace() to the model we can see that all of these have fairly stable results.
+
+```{r}
+mcmc_dens_overlay(Wine_model_1)
+```
+
+By applying mcmc_dens_overlay() from the plots we can see that the even after running the experiment 4 times the results are always close to each other.
+
+```{r}
+mcmc_acf(Wine_model_1)
+```
+
+After applying mcmc_acf() The graphs show the degrees to which successive values of simulation are related to each other. by looking at these graphs we can say that the correlation has been high in the initial stages of simulation. but if we observe successive observations of auto correlation has come down and they are almost equal to zero. which shows that the results are credible. and also as the variables are more the graphs are not very clearer.
+```{r}
+neff_ratio(Wine_model_1)
+rhat(Wine_model_1)
+```
+ 
+The draws within a Markov chain are not independent we can say there is a chance of autocorrelation existing for pH,alcohol, density, residual.sugar, fixed.acidity as the neff is less than one but for remaining predictors the effective sample size ratios are slightly below or near to 1 and the R-hat values are very close to 1, indicating that the chains are stable, mixing quickly, and behaving much like an independent sample.
+
+3.  Interpret the results of the model's parameters' PDFs - explain whether is support for the hypotheses you posited earlier, one hypothesis at a time, by connecting the results to the hypothesis' specification.
+```{r}
+posterior_interval(Wine_model_1, prob = 0.90)
+```
+
+```{r}
+pp_check(Wine_model_1)
+```
+After performing pp_check function we can see that the predictive values are normally distributed and the observed values are uneven considering the nature of the output variable we have taken. Hence i understood that the output variable i.e., quality of wine that i have taken with its true form cannot give an interpretable output when the funtion is applied. hence we cannot derive any concrete conclusion by using the graphical representation of the observed and predicted values.
+
+```{r}
+output<-tidy(Wine_model_1, effects=c("fixed","aux"),
+                              conf.int=TRUE,
+                              conf.level=0.95) 
+       output
+```
+
+```{r}
+d0 = which(output$conf.low < 0) 
+d1 = which(output$conf.high > 0) 
+output$term[intersect(d0, d1)]
+```
+
+From the tidy function summary it is clear that the citric acid and chlorides have the confidence intervals which includes zero which indicates that the quality has got no association with "citric.acid" and "chlorides". If the remaining predictors are concerned the predictors which have positive relation with quality of the wine are pH, alcohol, residual.sugar, fixed.acidity, free.sulfur.dioxide, sulphates and the predictors which have negative relation are density,     total.sulfur.dioxide, volatile.acidity. we can observe for the whole model the conficence intervals are very narrow and the standard error is very low. The decent estimates can be seen only for density, volatile.acidity, pH, alcohol, sulphates.and we can also observe that the ppd is positive and fairly high indicating the model derived from the given variables is a good-fit model.
+
+a) H0 - There is no significant association between the sulphates in the wine and the quality of the wine.
+
+sulphates has got a decent estimate which is 0.77 and the confidence intervals doesn't contain zero in their range which shows that there is a positive association between quality of wine and sulphates leaving us no choice but to reject the null hypothesis.
+
+b) H0 - There is no significant association between the level of alcohol and quality of the wine.
+
+level of alcohol has got a decent estimate which is 0.26 and the confidence intervals doesn't contain zero in their range which shows that there is a positive association between quality of wine and level of alcohol leaving us no choice but to reject the null hypothesis.
+
+c) H0 -There is no significant association between the volatile acidity and the quality of the wine.
+
+volatile acidity has got a decent estimate which is -1.32 and the confidence intervals doesn't contain zero in their range which shows that there is a negative association between quality of wine and volatile acidity leaving us no choice but to reject the null hypothesis.
+
+This proves that the statements provided in the reference material are true while stating the associations between the predictors taken adn the outcome variable.
+
+```{r}
+set.seed(2002) 
+predictions <- posterior_predict(Wine_model_1, newdata = project1)
+dim(predictions)
+
+```
+
+```{r}
+ppc_intervals(project1$quality,
+              yrep = predictions, 
+              prob = 0.5, 
+              prob_outer = 0.95)
+```
+Here we can see that the x axis is data point index and also we can observe that the predicted values fall in certain range and the observed value falls in the predicted range.As we go to the higher end of the spectrum on y axis which is >=4 to <=8  we see that most of the observed values are encompassed by the predicted values, and as we go to the lower end of spectrum we see some descrepant values.we can see some outliers on y=2 or 3 and 9 but we can say that our model is a good predictor for most of the values and bad predictor for a few values.
+
+
+```{r}
+set.seed(2002)
+prediction_summary(Wine_model_1, data = project1)
+```
+Almost 94.18% of the predicted values fall in the 95% range.indicating the model is good one.
+
+
+```{r}
+Wine_model_2 <- stan_glm(
+  quality ~ density+volatile.acidity+pH+alcohol+sulphates, 
+  data = project1, family = gaussian,
+  prior_intercept = normal(6, 1.5, autoscale = TRUE),
+  prior = normal(0,1, autoscale = TRUE), 
+  prior_aux = exponential(1, autoscale = TRUE),
+  chains = 4, iter = 5000*2, seed = 2002)
+```
+
+```{r}
+summary(Wine_model_2 )
+```
+
+The mean posterior predictive density which is a measure of how well the model fits the data is positive and fairly high.By looking at the MCMC diagnostics The mcse is zero for all the predictors and the rhat is 1 indicating there is no auto correlation.indicating we have sampled the posterior distribution fairly well and therefore considered reliable.And also the effective sample size is more than 10,000 indicating we have sampled the probability space enough to have a good representation.
+```{r}
+prior_summary(Wine_model_2)
+```
+
+
+```{r}
+mcmc_trace(Wine_model_2, size = 0.1)
+```
+After applying the mcmc_trace() function we can see that all of these has fairly stable results.
+
+```{r}
+mcmc_dens_overlay(Wine_model_2)
+```
+
+From these density overlay plots we can see that the even after running the experiment 4 times the results are always close to each other.
+
+```{r}
+mcmc_acf(Wine_model_2)
+```
+The graphs show the degrees to which successive values of simulation are related to each other. by looking at these graphs we can say that the correlation has been high in the initial stages of simulation. but if we observe successive observations of auto correlation has come down and they are almost equal to zero. which shows that the results are credible.
+
+```{r}
+neff_ratio(Wine_model_2)
+rhat(Wine_model_2)
+
+```
+
+The effective sample size ratios are slightly below 1 and the R-hat values are very close to 1, indicating that the chains are stable, mixing quickly, and behaving much like an independent sample.
+
+```{r}
+posterior_interval(Wine_model_2, prob = 0.90)
+```
+
+```{r}
+pp_check(Wine_model_2)
+```
+After performing pp_check function we can see that the predictive values are normally distributed and the observed values are uneven considering the nature of the output variable we have taken. Hence i understood that the output variable i.e., quality of wine that i have taken with its true form cannot give an interpretable output when the funtion is applied. hence we cannot derive any concrete conclusion by using the graphical representation of the observed and predicted values.
+```{r}
+output1<-tidy(Wine_model_2, effects=c("fixed","aux"),
+                              conf.int=TRUE,
+                              conf.level=0.95) 
+       output1
+```
+
+```{r}
+d2 = which(output1$conf.low < 0) 
+d3 = which(output1$conf.high > 0) 
+output1$term[intersect(d2, d3)]
+```
+
+From the tidy function summary it is clear that the "pH" has the confidence intervals which includes zero which indicates that the quality has got no association with "pH". If the remaining predictors are concerned the predictors which have positive relation with quality of the wine are alcohol,density, sulphates and the predictor which has negative relation is volatile.acidity. we can observe for the whole model the confidence intervals are very narrow and the standard error is very low. The decent estimates can be seen only for density and volatile.acidity.and we can also observe that the ppd is positive and fairly high indicating the model derived from the given variables is a good-fit model.
+
+Even here the associations of sulphates, volatile acidity and level of alcohol did not change proving that the null hypothesis can be rejected.
+
+```{r}
+set.seed(2002) 
+predictions1 <- posterior_predict(Wine_model_2, newdata = project1)
+dim(predictions1)
+```
+
+```{r}
+ppc_intervals(project1$quality,
+              yrep = predictions1, 
+              prob = 0.5, 
+              prob_outer = 0.95)
+```
+Here we can see that the x axis is data point index and also we can observe that the predicted values fall in certain range and the observed value falls in the predicted range.As we go to the higher end of the spectrum on y axis which is >=4 to <=8  we see that most of the observed values are encompassed by the predicted range, and as we go to the lower end of spectrum we see some descrepant values.we can see some outliers but we can say that our model is a good predictor for most of the values and bad predictor for a few values.
+
+```{r}
+set.seed(2002)
+prediction_summary(Wine_model_2, data = project1)
+```
+almost 94.10% of the predicted values fall in the 95% range.indicating the model is good one compared to the Wine_model_1, as this is reduced and uses only selected predictors and covers almost as much as the Wine_model_1. as we know The lower the MAE, the better a model fits a dataset, the mae for Wine_model_2 is slightly higher compared to Wine_model_1.
+```{r}
+set.seed(84735)
+loo_1 <- loo(Wine_model_1)
+loo_2 <- loo(Wine_model_2)
+c(loo_1$estimates[1], loo_2$estimates[1])
+loo_compare(loo_1, loo_2)
+```
+
+```{r}
+loo_1$estimates
+```
+
+```{r}
+loo_2$estimates
+```
+
+As we know that the higher the elpd Estimate the the better the model fit.here if we see that Wine_model_1 has higher elpd values -7230.03746 compared to Wine_model_2 -7307.899774.But this is not significantly higher.But An ELPD difference of zero is not within two standard errors of the estimated difference: -77.9 ± 2*(14.4) = (-49.1, -106.7).As both the ELPD adn the difference are saying the same thing, The Wine_model_1 is better fit than model Wine_model_2.
+
+
+## Conclusions
+
+The research questions :
+a)Is there a significant association between the sulphates in the wine and the quality of the wine?
+
+b)Is there a significant association between the level of alcohol and the quality of the wine?
+
+c)Is there a significant association between the volatile acidity and quality of the wine?
+
+As we can see from the summary of the tidy function from the above section that the sulphates, level of alcohol and volatile acidity are considered significant while predicting the quality of the wine.
+As their estimates are decent and the confidence intervals doesn't contain zero in the range proving a statistical significance.
+
+While performing analysis "citric.acid" has been identified as one of the predictors which has got no association with the quality of the wine but according to Cortez et al.(2009) the citric acid levels are more important in white wine to maintain equilibruim between freshness and sweet taste. As the two data sets are merged i think that has given an holistic outcome leaving a scope for misrepresentation, leading to sometimes false outcomes when it comes to considering red and white wine separately, not only the citric acid levels but the pH of the wine seemed to have no association with the quality after the analysis, which might not be true. so the separation with color is needed for the proper analysis of the dataset. Hence i created a separate column called color for further deep analysis of the data.
+
+Additional variable called Color is needed to do further research on the dataset, As the data is already present in public repository no ther approach is needed to collect the data. 
+
+a) Is there significant association between citric acid and the quality of white wine ?
+b) Is there significant association between residual sugar levels and the quality of the white wine?
+
+Yes, one of the conclusions that i have drawn from the reduced dataset's analysis is that pH value doesn't have any association with the quality of the wine but  Boulton et al. (1996) says otherwise they say that microbiological stability is being influenced by pH, it affects the equilibrium of tartrate salts, determines the effectiveness of sulfur dioxide and enzyme additions, influences the solubility of proteins and effectiveness of bentonite and affects red wine colour and oxidative and browning reactions.and another conclusion where "citric.acid" has been identified as one of the predictors which has got no association with the quality of the wine but according to Cortez et al.(2009) the citric acid levels are more important in white wine to maintain equilibruim between freshness and sweet taste. 
+
+From the above analysis I have come to a conclusion that both red and white wines has got its own way of preparation hence have its own set of predictor values, the analysis here gave us a combined understanding of both red and white where as for the next time analysis adding the attribute color to the merged dataset will fetch far different results than what we have seen today.
+
+## Reflections
+
+In order to first search for a dataset for the final project I felt like one should be clear about the topics in the bayesian rules, otherwise one wouldn't know which dataset to choose because of the lack of knowledge of where and how to look at and leverage the dataset to one's use. I have made a similar mistake I have taken a model and trying to search for datasets to fit in that model, which was tedious, after a while I understood all the concepts then the use case of dataset became clearer.The choice of research questions wasn't random, after going through the pdf which is available with the dataset I have found some statements in the pdf without proofs so I wanted to check its credibility and have proceeded with the analysis. haven't faced much difficulty regarding the choice of research questions, and I had merged two datasets so the data has been much of mixed between red and white wine this has become a challenge to understand which data belongs to which color of wine.
+
+Like i mentioned before I understood all the concepts of the bayesian rules and then the use case of datasets became clearer and was able to segregate into which model segment the dataset falls and can be analysed. The choice of variables. For the color challenge I have created a seperate column called color through which even though the data is mixed each of the data is tagged with the color of the wine leading to no confusion.
+
+There has been a drastic change in the learning curve of mine. Previously I haven't had any knowledge on the priors of the model, but here I have learnt how the prior data can be leveraged in order to predict the posterior data. Instead of lm and glm I have learn't regarding why we are using the stan_glm() function for building the models with priors. have learnt how to leverage loo_compare() in order to find a better fit model, where as previously I used to use only anova test to find that.
+
+
+##REFERENCES:
+
+P. Cortez, A. Cerdeira, F. Almeida, T. Matos and J. Reis. Modeling wine preferences by data mining from physicochemical properties. In Decision Support Systems, Elsevier, 47(4):547-553, 2009.
+http://www3.dsi.uminho.pt/pcortez/wine/
+
+Boulton, R.B.; Singleton, V.L.; Bisson, L.F.; Kunkee, R.E. 1996. Juice and wine acidity Principles and practices of winemaking. New York: Chapman & Hall: 521–253.
+
+Johnson, A. A., Ott, M. Q., & Dogucu, M. (2021, December 1).Bayes Rules! An Introduction to Applied Bayesian Modeling. Bayes Rules.
+https://www.bayesrulesbook.com/
