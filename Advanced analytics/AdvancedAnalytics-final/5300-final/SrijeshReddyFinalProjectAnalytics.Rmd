@@ -1,0 +1,446 @@
+SRIJESH REDDY YARRAM
+FINAL PROJECT 
+MS ANALYTICS
+
+```{R}
+#Loading the data set 
+library(readr)
+Medicalcosts <- read_csv("InsurancecostPred.csv")
+
+#View(Medicalcosts)
+
+#copying the dataframe
+medcostdf <- Medicalcosts
+
+summary(medcostdf)
+```
+```{R}
+#removings missing values
+medcostdf<-na.omit(medcostdf)
+summary(medcostdf)
+
+```
+
+```{r}
+###RECODING CATEGORICAL VARIABLES TO NUMERICS
+library(dplyr)
+library(forcats)
+
+medcostnewdf <- medcostdf %>%
+                   mutate(sex = fct_recode(sex, 
+                                          "0" = "female",
+                                          "1"= "male")) %>%
+                      mutate(smoker = fct_recode(smoker, 
+                                           "1"="yes",
+                                           "0"="no"))  %>%
+                        mutate(region = fct_recode(region, 
+                                           "1"= "southwest",
+                                           "2"= "southeast",
+                                           "3"= "northwest",
+                                           "4"= "northeast")) 
+medcostnewdf
+```
+
+
+
+DATA VISUALIZATION
+
+
+```{r}
+#plotting ggpairs to look at the data in each variable individually and appropriate pairs (predictor + outcome combinations) and note anything “interesting”.
+
+library("ggplot2")                      
+library("GGally") 
+ggpairs(medcostnewdf)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+agecharges <- medcostnewdf %>%
+  mutate(age_group = cut(age, breaks = seq(18, 64, by = 10))) %>%
+  ggplot(aes(x = charges, y = age, color = age_group)) +
+  geom_point(alpha = .6) +
+  labs(x = "charges", y = "age", color = "Age group") +
+  scale_color_brewer(palette = "Dark2") +
+  theme_minimal()
+agecharges
+```
+
+```{r}
+library(ggplot2)
+library(scales)
+
+charges_and_age <- medcostnewdf %>%
+  ggplot(aes(x = age, y = charges, color = charges)) +
+  geom_point(size = 2, alpha = 0.6) +
+  scale_color_gradient(low = "white", high = "darkblue") +
+  stat_smooth(method = "lm", se = FALSE, aes(group = 1), color = "black") +
+  labs(x = "Age", y = "Charges") +
+  theme_minimal()
+
+charges_and_age
+```
+
+```{r}
+library(ggplot2)
+
+# define custom colors
+my_colors <- c("#E69F00", "#56B4E9")
+
+# create scatter plot with custom colors
+charges_and_sex <- ggplot(medcostnewdf, aes(x = charges, y = sex, color = sex)) +
+  geom_point(alpha = .7, size = 3) +
+  scale_color_manual(values = my_colors) +
+  labs(x = "Charges", y = "Sex") +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.direction = "horizontal",
+    legend.box.just = "center",
+    axis.text.x = element_text(size = 12, color = "black"),
+    axis.text.y = element_text(size = 12, color = "black"),
+    axis.title.x = element_text(size = 14, color = "black", margin = margin(t = 10)),
+    axis.title.y = element_text(size = 14, color = "black", margin = margin(r = 10)),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    plot.title = element_text(size = 10, hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(size = 16, hjust = 0.5),
+    plot.caption = element_text(size = 12, hjust = 0, color = "grey50", margin = margin(t = 10, b = 5))
+  ) +
+  ggtitle("charges and sex")
+  
+
+charges_and_sex
+
+
+```
+
+
+```{r}
+library(ggthemes)
+library(viridis)
+
+charges_and_bmi_scatter <- medcostnewdf %>%
+  ggplot(aes(x = charges, y = bmi)) +
+  geom_point(aes(color = charges), alpha = .6) +
+  labs(x = "charges", y = "bmi", color = "charges") +
+  scale_color_viridis() +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "right",
+        axis.title = element_text(size = 12),
+        axis.text = element_text(size = 10))
+
+charges_and_bmi_scatter
+
+```
+
+
+```{r}
+childrengraph<-medcostnewdf %>%
+  ggplot(aes(x = charges, y = children, color = charges)) +
+  geom_point(alpha = 0.6, size = 3) +
+  scale_color_gradient(low = "blue", high = "red") +
+  labs(x = "Charges", y = "Children", color = "charges") +
+  theme_minimal()
+childrengraph
+
+```
+
+
+```{r}
+library(ggplot2)
+
+charges_and_smoker <- ggplot(medcostnewdf, aes(x = charges, y = factor(smoker), color = charges)) +
+  geom_jitter(width = 0.2, height = 0.2, alpha = 0.8, size = 3) +
+  scale_color_gradient(low = "#00BFC4", high = "#F8766D") +
+  labs(x = "Charges",
+       y = "Smoker",
+       title = "Charges vs. Smoker",
+       color = "Charges") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 9),
+        axis.title.x = element_text(size = 9),
+        axis.title.y = element_text(size = 9),
+        axis.text = element_text(size = 9),
+        legend.position = "bottom",
+        legend.title = element_text(size = 9),
+        legend.text = element_text(size = 9),
+        legend.direction = "horizontal",
+        legend.key.width = unit(2, "cm"),
+        legend.key.height = unit(0.5, "cm"))
+
+charges_and_smoker
+
+```
+
+
+```{r}
+library(ggplot2)
+library(ggthemes)
+
+charges_and_region <- medcostnewdf %>%
+ggplot(aes(x = charges, y = region)) +
+  geom_jitter(aes(color = region), alpha = .6, size = 3) +
+  geom_boxplot(aes(fill = region), alpha = .4) +
+  scale_color_tableau() +
+  scale_fill_tableau() +
+  labs(x = "Charges",
+       y = "Region") +
+  coord_flip() +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "top",
+        legend.direction = "horizontal",
+        legend.justification = "center",
+        legend.title = element_blank(),
+        legend.text = element_text(size = 10))
+
+charges_and_region +
+  ggtitle("Medical Charges by Region") +
+  theme(plot.title = element_text(size = 10, face = "bold"))
+
+
+```
+
+
+```{r}
+medcostnewdf$`Marital stat`  <- as.factor(medcostnewdf$`Marital stat`)
+medcostnewdf <- medcostnewdf%>%
+                   mutate(`Marital stat` = fct_recode(`Marital stat`, 
+                                          "0" = "0",
+                                          "1"= "1")) 
+```
+
+
+
+
+```{r}
+library(ggplot2)
+
+charges_and_maritalstat <-ggplot(medcostnewdf, aes(x = charges, y = `Marital stat`, color = `Marital stat`)) +
+  geom_jitter(alpha = 0.6, height = 0.2, width = 0.1) +
+  geom_boxplot(fill = "white", alpha = 0.4, outlier.shape = NA) +
+  labs(x = "Charges", y = "Marital Status") +
+  theme_minimal() +
+  theme(legend.position = "none", 
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12)) +
+  scale_color_manual(values = c("#00BFC4", "#F8766D", "#A3A500")) 
+charges_and_maritalstat
+```
+
+```{r}
+gridExtra::grid.arrange(agecharges,charges_and_age,charges_and_bmi_scatter,charges_and_smoker, charges_and_maritalstat,charges_and_region,childrengraph,charges_and_sex)
+```
+
+
+
+CLUSTER ANALYSIS
+
+
+
+
+```{r}
+# Load the required packages
+library(dplyr) # for data manipulation
+library(cluster) # for cluster analysis
+library(ggplot2) # for data visualization
+
+
+# Subset the relevant variables
+numeric_vars <- c("bmi", "age")
+exclude_vars <- c("sex", "region", "children", "Marital.stat", "smoker")
+data_subset <- medcostnewdf %>% select(-one_of(exclude_vars))
+
+
+# Normalize the numeric variables
+data_scaled <- scale(data_subset[, numeric_vars])
+
+# Perform k-means clustering with k=3
+set.seed(123)
+kmeans_output <- kmeans(data_scaled, centers = 4)
+
+# Extract the cluster assignments
+cluster_assignments <- kmeans_output$cluster
+
+# Add the cluster assignments to the original dataset
+data_clustered <- data_subset %>% 
+  mutate(cluster = as.factor(cluster_assignments))
+
+# Visualize the clusters using scatter plot
+ggplot(data_clustered, aes(x = bmi, y = age, color = cluster)) + 
+  geom_point() + 
+  labs(title = "BMI vs AGE by Cluster", x = "bmi", y = "age")
+
+# Compute the average charges by cluster
+data_summary <- data_clustered %>% 
+  group_by(cluster) %>% 
+  summarize(avg_charges = mean(charges))
+
+# Print the summary statistics
+print(data_summary)
+```
+
+
+
+```{r}
+library(caret)
+
+medcostnewdf<-na.omit(medcostnewdf)
+
+set.seed(500) ## chosen arbitrarily; helps with replication across runs
+inTraining <- createDataPartition(medcostnewdf$charges , ## indicate the outcome - helps in balancing the partitions
+                                  p = .90, ## proportion used in training+ testing subset
+                                  list = FALSE)
+training <-medcostnewdf[ inTraining,]
+holdout  <-medcostnewdf[-inTraining,]
+
+## centering and scaling as part of the pre-processing step
+preProcValues <- preProcess(training, method = c("center", "scale"))
+#preProcValues <- preProcess(training, method = "pca")
+preProcValues
+## Next, create the scaled+centered of the training+testing subset of the dataset
+trainTransformed <- predict(preProcValues,training) 
+trainTransformed
+## apply the same scaling and centering on the holdout set, too
+holdoutTransformed <- predict(preProcValues,holdout)
+holdoutTransformed
+
+
+fitControl <- trainControl(method = "repeatedcv", ## indicate that we want to do k-fold CV
+                           number = 10, ## k = 10
+                           repeats = 10) ## and repeat 10-fold CV 10 times
+```
+
+```{r}
+trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 10)
+set.seed(500)
+knn_fit <- train(charges ~ ., data = trainTransformed, method = "knn",    
+                 metric= 'RMSE',
+                 trControl=trctrl,
+                 preProcess = c("center", "scale"),
+                 tuneLength = 10)
+
+knn_fit
+```
+```{r}
+
+## make predictions on the hold-out set
+predvals <- predict(knn_fit, holdoutTransformed)
+
+## compute the performance metrics
+postResample(pred = predvals, obs = holdoutTransformed$charges)
+
+#varImp(knn_fit)
+```
+
+############################randomforest########################################
+
+```{r}
+fitControl <- trainControl(method = "repeatedcv", ## indicate that we want to do k-fold CV
+                           number = 10, ## k = 10
+                           repeats = 10) ## and repeat 10-fold CV 10 times
+```
+
+```{r}
+#building random forest model
+rf_random <- train(charges ~ .,
+                 data = trainTransformed, ## the dataset containing the training-testing subset
+                 method = "rf", 
+                 metric = 'RMSE',
+                 trControl = fitControl) 
+rf_random
+```
+
+
+
+```{r}
+
+## make predictions on the hold-out set
+predvals <- predict(rf_random, holdoutTransformed)
+
+## compute the performance metrics
+postResample(pred = predvals, obs = holdoutTransformed$charges)
+
+varImp(rf_random)
+```
+
+
+###############LASSO FIT########################################################
+```{R}
+set.seed(500)
+fitControl <- trainControl(method = "repeatedcv", ## indicate that we want to do k-fold CV
+                           number = 10, ## k = 10
+                           repeats = 10) ## and repeat 10-fold CV 10 times
+
+lassofit<- train(charges ~ .,
+                    data = trainTransformed,
+                    method = "glmnet",
+                  metric = 'RMSE',
+                trControl=fitControl,
+                preProc = c("center","scale"),
+                tuneGrid = expand.grid(alpha = 1,
+                                       lambda = 0))
+lassofit
+```
+
+```{r}
+
+## make predictions on the hold-out set
+predvals <- predict(lassofit, holdoutTransformed)
+
+## compute the performance metrics
+postResample(pred = predvals, obs = holdoutTransformed$charges)
+
+varImp(lassofit)
+```
+
+
+```{r}
+#multiple LINEAR REGRESSION
+trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 10)
+set.seed(500)
+mlr_fit <- train(charges ~ ., data = trainTransformed,
+                method = "lm",
+                trControl=trctrl, 
+                metric= "RMSE",
+                preProcess = c("center", "scale"),
+                tuneLength = 10)
+
+mlr_fit
+
+```
+
+```{r}
+
+## make predictions on the hold-out set
+predvals <- predict(mlr_fit, holdoutTransformed)
+
+## compute the performance metrics
+postResample(pred = predvals, obs = holdoutTransformed$charges)
+
+varImp(mlr_fit)
+```
+
+
+```{r}
+
+library(mlbench)
+library(caret)
+results <- resamples(list(RF=rf_random, MLR=mlr_fit, Lasso=lassofit, knn=knn_fit))
+# summarize the distributions
+summary(results)
+# boxplots of results
+bwplot(results)
+# dot plots of results
+dotplot(results)
+
+```
+
+

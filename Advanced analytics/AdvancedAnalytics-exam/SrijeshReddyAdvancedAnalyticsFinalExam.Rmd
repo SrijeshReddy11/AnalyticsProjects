@@ -1,0 +1,360 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+```{r}
+library(readr)
+data <- read_csv("dataset-exam-2.csv")
+```
+```{r}
+#recoding categories in x5
+library(tidyverse)
+df$X5  <- as.factor(df$X5)
+dff <- df%>%
+            mutate(X5 = fct_recode(X5, 
+                                          "2" = "0",
+                                          "1"= "1"))
+summary(dff)
+View(dff)
+```
+```{r}
+#veryfying column x5
+summary(dff$X5)
+prop.table(table(dff$X5))
+
+table(dff$X5)
+```
+```{r}
+#subset of data where X5 == 1
+df1 <- subset(dff, X5 == 1)
+
+#correlation matrix for X1 - X4 and Y
+cor(df1[, c("X1", "X2", "X3", "X4", "Y")])
+
+library("ggplot2")                      
+library("GGally") 
+ggpairs(df1)
+```
+
+
+```{r}
+#subset of data where X5 == 1
+df2 <- subset(dff, X5 == 2)
+
+#correlation matrix for X1 - X4 and Y
+cor(df2[, c("X1", "X2", "X3", "X4", "Y")])
+
+library("ggplot2")                      
+library("GGally") 
+ggpairs(df2)
+```
+
+
+
+```{r}
+
+   
+    # Subset of observations from majority group
+    train_test_data <- data[data$X5 == 1, c("X1", "X2", "X3", "X4", "Y")]
+    
+    # Subset of remaining observations
+    holdout_data <- data[data$X5 == 2, c("X1", "X2", "X3", "X4", "Y")]
+    
+    library(caret)
+    
+    # Set seed for reproducibility
+    set.seed(123)
+   #REMOVING X5 FROM DataFrame 
+    data <- select(data, -X5)
+    # Split into training and testing sets
+    trainIndex <- createDataPartition(data$Y, p = 0.8, list = FALSE)
+    training <- data[trainIndex,]
+    holdout <- data[-trainIndex, ]
+   
+  
+    
+    ## centering and scaling as part of the pre-processing step
+    preProcValues <- preProcess(training, method = c("center", "scale"))
+    
+    ## Next, create the scaled+centered of the training+testing subset of the data set
+    trainTransformed <- predict(preProcValues, training) 
+   
+    ## apply the same scaling and centering on the holdout set, too
+    holdoutTransformed <- predict(preProcValues, holdout)
+   
+```
+```{r}
+ fitControl <- trainControl(
+      method = "repeatedcv", ## perform repeated k-fold CV
+      number = 5,
+      repeats = 1,
+      classProbs = TRUE)
+```
+    
+```{r}      
+    #Multiple--linear
+    lm_fit<- train(Y ~ ., 
+                         data = trainTransformed,
+                         method = "lm")
+    varImp(lm_fit)
+    lm_fit
+```
+```{r}
+# Compute predicted values for linear regression model
+lm_pred <- predict(lm_fit, newdata =  holdoutTransformed)
+# Calculate RMSE
+lm_rmse <- caret::RMSE(lm_pred,  holdoutTransformed$Y)
+# Print RMSE
+cat("Linear Regression Model RMSE: ", lm_rmse, "\n")
+```
+
+```{r}
+#GAM
+    library(mgcv)
+    library(caret)
+
+    
+    gam_Fit <- train(Y ~ .,
+                          data = trainTransformed, 
+                          method = "gamSpline")
+    
+    gam_Fit
+    varImp(gam_Fit)
+```
+
+```{R}
+    
+gam_pred <- predict(gam_Fit, newdata =  holdoutTransformed)
+# Calculate RMSE
+gam_rmse <- caret::RMSE(gam_pred,  holdoutTransformed$Y)
+# Print RMSE
+cat("GAM Model RMSE: ", gam_rmse, "\n")
+```
+
+
+```{r}
+
+library(gbm)
+#Boosted tree model
+    
+    grid <- expand.grid(interaction.depth = seq(1:3),
+                        shrinkage = seq(from = 0.01, to = 0.2, by = 0.01),
+                        n.trees = seq(from = 100, to = 500, by = 100),
+                        n.minobsinnode = seq(from = 5, to = 15, by = 5)
+    )
+    
+    
+    tree_fit <- train(Y ~ .,
+                        data = trainTransformed, 
+                        method = "gbm",
+                        trControl = fitControl,
+                        verbose = FALSE,
+                        tuneGrid = grid)
+    tree_fit
+    
+var_imp <- varImp(tree_fit)
+
+# Print the variable importance measures
+print(var_imp)
+```
+
+```{r}
+library(randomForest)
+
+
+  # Compute predicted values for boosted tree model
+tree_pred <- predict(tree_fit, newdata =  holdoutTransformed)
+# Calculate RMSE
+tree_rmse <- caret::RMSE(tree_pred,  holdoutTransformed$Y)
+# Print RMSE
+cat("Boost Model RMSE: ", tree_rmse, "\n")
+
+```
+
+
+
+******************ON HOLDOUT ******************
+    
+```{r}      
+    #Multiple--linear
+    Hlm_fit<- train(Y ~ ., 
+                         data = holdoutTransformed,
+                         method = "lm")
+    varImp(Hlm_fit)
+  
+```
+```{r}
+# Compute predicted values for linear regression model
+Hlm_pred <- predict(Hlm_fit, newdata =  holdoutTransformed)
+# Calculate RMSE
+Hlm_rmse <- caret::RMSE(Hlm_pred,  holdoutTransformed$Y)
+# Print RMSE
+cat("Linear Regression Model RMSE: ", Hlm_rmse, "\n")
+```
+
+```{r}
+#GAM
+    library(mgcv)
+    library(caret)
+    
+    Hgam_Fit <- train(Y ~ .,
+                          data = holdoutTransformed, 
+                          method = "gamSpline")
+    
+    Hgam_Fit
+    varImp(Hgam_Fit)
+```
+
+```{R}
+    
+Hgam_pred <- predict(Hgam_Fit, newdata =  holdoutTransformed)
+# Calculate RMSE
+Hgam_rmse <- caret::RMSE(Hgam_pred,  holdoutTransformed$Y)
+# Print RMSE
+cat("GAM Model RMSE: ", Hgam_rmse, "\n")
+```
+
+```{r}
+    
+#Boosted tree model
+    
+    grid <- expand.grid(interaction.depth = seq(1:3),
+                        shrinkage = seq(from = 0.01, to = 0.2, by = 0.01),
+                        n.trees = seq(from = 100, to = 500, by = 100),
+                        n.minobsinnode = seq(from = 5, to = 15, by = 5)
+    )
+    
+    
+    Htree_fit <- train(Y ~ .,
+                        data = holdoutTransformed, 
+                        method = "gbm",
+                        trControl = fitControl,
+                        verbose = FALSE,
+                        tuneGrid = grid)
+```
+```{r}
+  # Compute predicted values for boosted tree model
+Htree_pred <- predict(Htree_fit, newdata =  holdoutTransformed)
+# Calculate RMSE
+Htree_rmse <- caret::RMSE(Htree_pred,  holdoutTransformed$Y)
+# Print RMSE
+cat("Boost Model RMSE: ", Htree_rmse, "\n")
+varImp(Htree_fit)
+```
+
+SHUFFLING
+
+
+```{r}
+for (iternum in (1:3)){
+      print(paste("Shuffle number:", iternum))
+      Shuffled_data <- data[sample(nrow(data)), ]
+      print(Shuffled_data)
+}
+```
+
+```{r}
+    
+    library(caret)
+    
+    # Set seed for reproducibility
+    set.seed(123)
+    
+    
+    # Split into training and testing sets
+    trainIndex <- createDataPartition(data$Y, p = 0.8, list = FALSE)
+    training <- Shuffled_data[trainIndex,]
+    holdout <- Shuffled_data[-trainIndex, ]
+   
+  
+    
+    ## centering and scaling as part of the pre-processing step
+    preProcValues <- preProcess(training, method = c("center", "scale"))
+    
+    ## Next, create the scaled+centered of the training+testing subset of the data set
+    trainTransformed <- predict(preProcValues, training) 
+   
+    ## apply the same scaling and centering on the holdout set, too
+    holdoutTransformed <- predict(preProcValues, holdout)
+   
+```
+
+```{r}
+ fitControl <- trainControl(
+      method = "repeatedcv", ## perform repeated k-fold CV
+      number = 5,
+      repeats = 1,
+      classProbs = TRUE)
+```
+    
+```{r}      
+    #Multiple--linear
+    lm_fit1<- train(Y ~ ., 
+                         data = trainTransformed,
+                         method = "lm")
+    varImp(lm_fit1)
+  
+```
+
+```{r}
+# Compute predicted values for linear regression model
+lm_pred1 <- predict(lm_fit1, newdata =  holdoutTransformed)
+# Calculate RMSE
+lm_rmse1 <- caret::RMSE(lm_pred1,  holdoutTransformed$Y)
+# Print RMSE
+cat("Linear Regression Model RMSE: ", lm_rmse1, "\n")
+```
+
+
+```{r}
+#GAM
+    library(mgcv)
+    library(caret)
+    
+    gam_Fit1 <- train(Y ~ .,
+                          data = trainTransformed, 
+                          method = "gamSpline")
+    
+    gam_Fit1
+    varImp(gam_Fit1)
+```
+
+```{R}
+    
+gam_pred1 <- predict(gam_Fit1, newdata =  holdoutTransformed)
+# Calculate RMSE
+gam_rmse1 <- caret::RMSE(gam_pred1,  holdoutTransformed$Y)
+# Print RMSE
+cat("GAM Model RMSE: ", gam_rmse1, "\n")
+```
+
+```{r}
+    
+#Boosted tree model
+    
+    grid <- expand.grid(interaction.depth = seq(1:3),
+                        shrinkage = seq(from = 0.01, to = 0.2, by = 0.01),
+                        n.trees = seq(from = 100, to = 500, by = 100),
+                        n.minobsinnode = seq(from = 5, to = 15, by = 5)
+    )
+    
+    
+    tree_fit1 <- train(Y ~ .,
+                        data = trainTransformed, 
+                        method = "gbm",
+                        trControl = fitControl,
+                        verbose = FALSE,
+                        tuneGrid = grid)
+```
+
+```{r}
+  # Compute predicted values for boosted tree model
+tree_pred1 <- predict(tree_fit1, newdata =  holdoutTransformed)
+# Calculate RMSE
+tree_rmse1 <- caret::RMSE(tree_pred1,  holdoutTransformed$Y)
+# Print RMSE
+cat("Boost Model RMSE: ", tree_rmse1, "\n")
+varImp(tree_fit1)
+```
